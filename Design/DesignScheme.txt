@@ -1,4 +1,4 @@
-﻿
+﻿﻿
 Abscript Basics;
 
 Loosely and strongly typed system of abstractions built to support the development of a scripting language.
@@ -13,9 +13,8 @@ All imported libraries are called directly by the main interpreter.
 All objects are encapsulated in the ScriptList by default and only invoked when manually invoked.
 Any unknown or generic objects are stored as "object" types in the C# system and must be typecast functionally.
 
-// ------------------------------------------------------------------------------------------
-Reserved words and their purposes;
-// ------------------------------------------------------------------------------------------
+/// Reserved words and their purposes;
+
 	// ------------------------------------------------------------------------------------------
 	in
 		This is the "using" operator for Abscript. It imports C# libraries or Abscript libraries for use.
@@ -137,10 +136,12 @@ Reserved words and their purposes;
 		end
 	end
 	
-			
+
 // ------------------------------------------------------------------------------------------
+
 // Scoping Parameters;
-// ------------------------------------------------------------------------------------------
+
+	// ------------------------------------------------------------------------------------------
 	All default scoping for func, act, and variables are considered private by default.
 	Thus eliminating the need for a private keyword.
 	// ------------------------------------------------------------------------------------------

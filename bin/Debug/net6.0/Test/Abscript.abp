@@ -1,3 +1,13 @@
 ﻿Test = ""
 
-Test2 = ""
+Test2 = "Chicken"
+var Test3
+var Test4 = "ChickenTaco"
+
+class Bacon
+
+	+Construct
+	end
+	~Destruct
+	end
+end

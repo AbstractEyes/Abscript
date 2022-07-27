@@ -5,4 +5,4 @@ Console.WriteLine("Hello, World!");
 
 string Location = @"C:\Users\PHIL\source\repos\Abscript\Test\Abscript.abp";
 
-Tokenizer tokenize = new Tokenizer(File.ReadAllText(Location));
+Lexer tokenize = new Lexer(File.ReadAllText(Location));

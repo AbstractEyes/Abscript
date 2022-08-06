@@ -977,8 +977,8 @@ namespace Abscript.Parser
             {
                 if (State.CurrentToken == null) State.CurrentToken = new(pos, currentScope);
                 char currentChar = rawScript[pos];
-                // Empty character, move along sir.
                 stringCombo += currentChar;
+                // Operates based on the lexer command after a comparator is found.
                 if (LexerCommandActive(stringCombo))
                 {
                     switch (State.CurrentOperation)
@@ -1001,7 +1001,8 @@ namespace Abscript.Parser
                             break;
                     }
                 }
-                if(IdentifyToken(stringCombo))
+                // Continues to identify; need rewrite.
+                if (IdentifyToken(stringCombo))
                 {
                     pos += State.CurrentToken.Identifier.Length;
                     list.Add(State.CurrentToken);

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.ComponentModel;
 
 namespace Abscript.Parser
 {
@@ -26,17 +27,50 @@ namespace Abscript.Parser
 
     internal class Token
     {
-        public List<TokenSimple> Types { get; set; } = new() { TokenSimple.NULL };
+        List<object> Types { get; set; } = new() { TokenSimple.NONE };
         public int ScopeDepth { get; set; } = 0;
         public string Identifier { get; set; } = "";
 
         public int StartPos { get; set; } = -1;
-        public int EndPos { get; set; } = -1;
+
+        public void AddType(object type)
+        {
+            if (!Types.Contains(type))
+            {
+                if(type is List<object> tList)
+                {
+                    foreach (var t in tList)
+                    {
+                        AddType(t);
+                    }
+                }
+                else if(type is List<string> sList)
+                {
+                    foreach (var s in sList)
+                    {
+                        AddType(s);
+                    }
+                }
+                else
+                {
+                    Types.Add(type);
+                }
+            }
+        }
+
+        public bool ContainsType(object type)
+        {
+            return Types.Contains(type);
+        }
 
         public Token(int start, int depth)
         {
             StartPos = start;
             ScopeDepth = depth;
+        }
+        public Token()
+        {
+            
         }
     }
 
@@ -48,7 +82,7 @@ namespace Abscript.Parser
      *      The individual patterns are defined in the TokenCombination class.
      *      The Tokens class houses a complete Directives dictionary of all of the patterns currently in use.
      */
-    public enum TokenCategory
+    public enum TokenSuperCategory
     {
         UNKNOWN,
         IDENTIFIER,
@@ -67,16 +101,7 @@ namespace Abscript.Parser
         COMMENT
     }
 
-    public enum TokenCombo
-    {
-        UNKNOWN,
-        COMMENT_LINE,
-        COMMENT_BLOCK_OPEN,
-        COMMENT_BLOCK_CLOSE,
-        ANY_IDENTIFIER,
-        CLASS_IDENTIFIER
-        
-    }
+
 
     /*
      * 
@@ -89,52 +114,267 @@ namespace Abscript.Parser
      * The encapsulation directives will split into tree tokens on first check.
      * 
      */
+    public class TokenDelimiterAttribute : Attribute
+    {
+        public List<string> Assignments { get; set; } = new List<string>();
+        public TokenDelimiterAttribute(params string[] names)
+        {
+            Assignments = names.ToList();
+        }
+    }
+    public static class EnumExtensions
+    {
+
+        // This extension method is broken out so you can use a similar pattern with 
+        // other MetaData elements in the future. This is your base method for each.
+        public static T? GetAttribute<T>(this Enum value) where T : Attribute
+        {
+            var type = value.GetType();
+            var memberInfo = type.GetMember(value.ToString());
+            var attributes = memberInfo[0].GetCustomAttributes(typeof(T), false);
+            return attributes.Length > 0
+              ? (T)attributes[0]
+              : null;
+        }
+
+        // This method creates a specific call to the above method, requesting the
+        // Description MetaData attribute.
+        public static string ToName(this Enum value)
+        {
+            var attribute = value.GetAttribute<DescriptionAttribute>();
+            return attribute == null ? value.ToString() : attribute.Description;
+        }
+        
+        public static List<string> GetIdentifiers(this Enum value)
+        {
+            var attribute = value.GetAttribute<TokenDelimiterAttribute>();
+            return attribute == null ? new List<string>() : attribute.Assignments;
+        }
+
+    }
 
     public enum TokenSimple
     {
-        ANY,
-        ANY_CHAR,
-        ANY_DIGIT,
+        [TokenDelimiter("")]
+        NONE,
+        [TokenDelimiter("regex[a-zA-Z]")]
         ANY_LETTER,
-        OPERATOR,
-        DEFAULT,
-        NULL,
-        BOOL,
-        TYPE,
-        WHITESPACE,
-        NEWLINE,
-        ESCAPE_CHAR,
+        [TokenDelimiter("regex[0-9]")]
+        ANY_NUMBER,
+        //[TokenDelimiter(".", ",", "(", ")", "[", "]", 
+        //    "{", "}", "`", "~", "$", "@", "#", "<", ">", 
+        //    "=", "+", "-", "/", "*", "%", "^", "!", "&", "|",
+        //    ";", "\n", "\r", "\t", "<=", ">=", "==", "!=", "&&", "||")]
+        //ANY_OPERATOR,
+        [TokenDelimiter("*")]
         WILDCARD,
-        END,
-        DOT,
+        [TokenDelimiter(" ")]
+        WHITESPACE,
+        [TokenDelimiter("\n")]
+        NEWLINE,
+        [TokenDelimiter("\\")]
+        ESCAPE_CHAR,
+        [TokenDelimiter(".")]
+        DOT, 
+        [TokenDelimiter(",")]
+        COMMA,
+        [TokenDelimiter(":")]
         COLON,
+        [TokenDelimiter(";")]
+        SEMICOLON,
+        [TokenDelimiter("=")]
         EQUAL,
+        [TokenDelimiter("!=")]
         NOT_EQUAL,
+        [TokenDelimiter("<")]
         LESS_THAN,
+        [TokenDelimiter("<=")]
         LESS_THAN_EQUAL,
+        [TokenDelimiter(">")]
         GREATER_THAN,
+        [TokenDelimiter(">=")]
         GREATER_THAN_EQUAL,
+        [TokenDelimiter("+")]
         PLUS,
+        [TokenDelimiter("-")]
         MINUS,
-        MULTIPLY,
+        [TokenDelimiter("*")]
+        MULTIPLY           ,
+        [TokenDelimiter("/")]
         DIVIDE,
+        [TokenDelimiter("%")]
         MODULUS,
-        EXPONENT,
+        [TokenDelimiter("^")]
+        EXPONENT           ,
+        [TokenDelimiter("&")]
         AMPERSAND,
+        [TokenDelimiter("|")]
         PIPE,
+        [TokenDelimiter("^")]
         CARET,
-        TILDE,
-        QUESTION,
-        EXCLAMATION,
-        DOUBLE_QUOTE,
-        SINGLE_QUOTE,
-        BACKTICK,
-        BACKSLASH,
-        PERCENT,
-        DOLLAR,
-        HASH,
-        AT,
+        [TokenDelimiter("~")]
+        TILDE              ,
+        [TokenDelimiter("?")]
+        QUESTION           ,
+        [TokenDelimiter("!")]
+        EXCLAMATION        ,
+        [TokenDelimiter("\"")]
+        DOUBLE_QUOTE       ,
+        [TokenDelimiter("\'")]
+        SINGLE_QUOTE       ,
+        [TokenDelimiter("`")]
+        BACKTICK           ,
+        [TokenDelimiter("\\")]
+        BACKSLASH          ,
+        [TokenDelimiter("%")]
+        PERCENT            ,
+        [TokenDelimiter("$")]
+        DOLLAR             ,
+        [TokenDelimiter("#")]
+        HASH               ,
+        [TokenDelimiter("@")]
+        AT                 ,
+        [TokenDelimiter("&&")]
         AMPERSAND_AMPERSAND,
+        [TokenDelimiter("||")]
+        PIPE_PIPE,
+        [TokenDelimiter("==")]
+        EQUAL_EQUAL,
+        [TokenDelimiter("(")]
+        PARENTHESIS_OPEN,
+        [TokenDelimiter(")")]
+        PARENTHESIS_CLOSE,
+        [TokenDelimiter("[")]
+        BRACE_OPEN,
+        [TokenDelimiter("]")]
+        BRACE_CLOSE,
+        [TokenDelimiter("{")]
+        BRACKET_OPEN,
+        [TokenDelimiter("}")]
+        BRACKET_CLOSE,
+
+        [TokenDelimiter("if")]
+        IF,
+        [TokenDelimiter("else")]
+        ELSE,
+        [TokenDelimiter("elseif", "elsif", "else if")]
+        ELSEIF,
+        [TokenDelimiter("while")]
+        WHILE,
+        [TokenDelimiter("for")]
+        FOR,
+        [TokenDelimiter("foreach")]
+        FOREACH,
+        [TokenDelimiter("do")]
+        DO,
+        [TokenDelimiter("break")]
+        BREAK,
+        [TokenDelimiter("continue")]
+        CONTINUE,
+        [TokenDelimiter("return")]
+        RETURN,
+        [TokenDelimiter("new")]
+        NEW,
+        [TokenDelimiter("delete")]
+        DELETE,
+        [TokenDelimiter("throw")]
+        THROW,
+        [TokenDelimiter("try")]
+        TRY,
+        [TokenDelimiter("catch")]
+        CATCH,
+        [TokenDelimiter("finally")]
+        FINALLY,
+        [TokenDelimiter("switch")]
+        SWITCH,
+        [TokenDelimiter("case")]
+        CASE,
+        [TokenDelimiter("default")]
+        DEFAULT,
+        [TokenDelimiter("null")]
+        NULL,
+        [TokenDelimiter("true")]
+        TRUE,
+        [TokenDelimiter("false")]
+        FALSE,
+        [TokenDelimiter("this")]
+        THIS,
+        [TokenDelimiter("super")]
+        SUPER,
+        [TokenDelimiter("extends")]
+        EXTENDS,
+        [TokenDelimiter("import")]
+        IMPORT,
+        [TokenDelimiter("package")]
+        PACKAGE,
+        [TokenDelimiter("static")]
+        STATIC,
+        [TokenDelimiter("public")]
+        PUBLIC,
+        [TokenDelimiter("private")]
+        PRIVATE,
+        [TokenDelimiter("protected")]
+        PROTECTED,
+        [TokenDelimiter("internal")]
+        INTERNAL,
+        [TokenDelimiter("abstract")]
+        ABSTRACT,
+        [TokenDelimiter("final")]
+        FINAL,
+        [TokenDelimiter("override")]
+        OVERRIDE,
+        [TokenDelimiter("synchronized")]
+        SYNCHRONIZED,
+        [TokenDelimiter("volatile")]
+        VOLATILE,
+        [TokenDelimiter("transient")]
+        TRANSIENT,
+        [TokenDelimiter("native")]
+        NATIVE,
+        [TokenDelimiter("strictfp")]
+        STRICTFP,
+        [TokenDelimiter("assert")]
+        ASSERT,
+        [TokenDelimiter("enum")]
+        ENUM,
+    }
+
+    public enum TokenCombo
+    {
+        [TokenDelimiter("unknown")]
+        UNKNOWN,
+        [TokenDelimiter("//")]
+        COMMENT_LINE,
+        [TokenDelimiter("/*")]
+        COMMENT_BLOCK_OPEN,
+        [TokenDelimiter("*/")]
+        COMMENT_BLOCK_CLOSE,
+        [TokenDelimiter(@"regex[a-zA-Z_][a-zA-Z0-9_]*")]
+        ANY_IDENTIFIER,
+        [TokenDelimiter("class")]
+        CLASS_BLOCK_OPEN,
+        [TokenDelimiter("act")]
+        ACTION_BLOCK_OPEN,
+        [TokenDelimiter("func")]
+        FUNCTION_BLOCK_OPEN,
+        [TokenDelimiter("con", "regex~+[a-zA-Z0-9_]*")]
+        CONSTRUCTOR_BLOCK_OPEN,
+        [TokenDelimiter("des", "regex~-[a-zA-Z0-9_]*")]
+        DESTRUCTOR_BLOCK_OPEN,
+        [TokenDelimiter("end")]
+        GENERAL_CLOSE,
+        [TokenDelimiter("import", "script")]
+        IMPORT_LINE,
+        [TokenDelimiter("+", "-", "/", "*", "%", "^", "=", "<", ">", "!", "&", "|")]
+        UNARY_OPERATOR,
+        [TokenDelimiter(".", ",", "(", ")", "[", "]", "{", "}", "`", "~", "$", "@", "#")]
+        PRIMARY_OPERATOR,
+        [TokenDelimiter("\n", ";")]
+        NEW_LINE,
+        [TokenDelimiter("class", "act", "func", "con", "des", "import", "script")]
+        WORD_OPERATOR,
+
+
     }
 
     public enum LexerOperation
@@ -144,50 +384,117 @@ namespace Abscript.Parser
         CLOSE,              // Closes and decreases the scope depth by 1
         NULLIFY_TO,         // Nullifies all ahead of this until a comparator token is hit or the lexer state is changed.
         NORMALIZE,          // Normalizes and discontinues token nullification.
-        MATCH_REGEX         // Matches regex pattern until it hits a comparator token or the lexer state is changed.
+        MATCH_REGEX,        // Matches regex pattern until it hits a comparator token or the lexer state is changed.
+        EXPECT,             // Expects one from a list of comparator tokens. If alternative is hit, the token is discarded.
+        ENSUE,              // If the expected token is hit, it runs the ensue opcode.
     }
 
-    public class LexerCommand
+    // Only one LexerOperation can exist in a LexerCommand
+    public class LexerCommandAttribute : Attribute
     {
         public LexerOperation Operation { get; private set; } = LexerOperation.NONE;
-        public TokenSimple Token { get; private set; } = TokenSimple.NULL;
-        public TokenCombo Specific { get; private set; } = TokenCombo.UNKNOWN;
-        public TokenCategory Category { get; private set; } = TokenCategory.UNKNOWN;
-        public List<object> ComparatorClose { get; private set; } = new List<object>();
-        public List<object> ComparatorInvalid { get; private set; } = new List<object>();
+        public TokenSuperCategory Category { get; private set; } = TokenSuperCategory.UNKNOWN;
+        List<object> ComparatorEndpointobj { get; set; } = new List<object>();
+        public List<string> ComparatorEndpoint { get; private set; } = new List<string>();
+        List<object> ComparatorInvalidobj { get; set; } = new List<object>();
+        public List<string> ComparatorInvalid { get; private set; } = new List<string>();
         public string Value { get; private set; } = "";
-        public bool IsSimple()
-        {
-            return Token != TokenSimple.NULL && Specific == TokenCombo.UNKNOWN && TokenCategory.UNKNOWN == Category;
-        }
 
-        public LexerCommand SetValue(string value)
+        public LexerCommandAttribute SetValue(string value)
         {
             Value = value;
             return this;
         }
-        public LexerCommand SetOp(LexerOperation operation)
+        public LexerCommandAttribute SetOperation(LexerOperation operation)
         {
             Operation = operation;
             return this;
         }
-        public LexerCommand SetComparatorClose(params object[] tokens)
+        public LexerCommandAttribute SetComparatorEndpoint(params object[] tokens)
         {
-            ComparatorClose = tokens.ToList();
+            ComparatorEndpointobj = tokens.ToList();
+            PrepareComparatorEndpointStrings();
             return this;
         }
-        public LexerCommand SetComparatorInvalid(params object[] tokens)
+        public LexerCommandAttribute SetComparatorInvalid(params object[] tokens)
         {
-            ComparatorInvalid = tokens.ToList();
+            ComparatorInvalidobj = tokens.ToList();
+            PrepareComparatorInvalidStrings();
             return this;
         }
 
-        public bool IsWhitelisted(params object[] tokens)
+        public List<object> GetComparatorEndpointObjects()
+        {
+            return ComparatorEndpointobj;
+        }
+        public List<object> GetComparatorInvalidObjects()
+        {
+            return ComparatorInvalidobj;
+        }
+        
+        public List<string> GetComparatorEndpoint()
+        {
+            return ComparatorEndpoint;
+        }
+        public List<string> GetComparatorInvalid()
+        {
+            return ComparatorInvalid;
+        }
+
+
+        private void PrepareComparatorEndpointStrings()
+        {
+            if (ComparatorEndpoint.Count == 0)
+            {
+                List<string> list = new();
+                foreach (var close in ComparatorEndpointobj)
+                {
+                    if (close is string c)
+                    {
+                        list.Add(c);
+                    }
+                    else if (close is TokenSimple s)
+                    {
+                        list.AddRange(s.GetIdentifiers());
+                    }
+                    else if (close is TokenCombo combo)
+                    {
+                        list.AddRange(combo.GetIdentifiers());
+                    }
+                }
+                ComparatorEndpoint = list;
+            }
+        }
+        private void PrepareComparatorInvalidStrings()
+        {
+            if (ComparatorInvalid.Count == 0)
+            {
+                List<string> list = new();
+                foreach (var close in ComparatorInvalidobj)
+                {
+                    if (close is string c)
+                    {
+                        list.Add(c);
+                    }
+                    else if (close is TokenSimple s)
+                    {
+                        list.AddRange(s.GetIdentifiers());
+                    }
+                    else if (close is TokenCombo combo)
+                    {
+                        list.AddRange(combo.GetIdentifiers());
+                    }
+                }
+                ComparatorInvalid = list;
+            }
+        }
+
+        public bool IsEndpoint(params string[] tokens)
         {
             // determines if the whitelist contines any of the tokens
-            return ComparatorClose.Any(token => tokens.Contains(token));
+            return ComparatorEndpoint.Any(token => tokens.Contains(token));
         }
-        public bool IsBlacklisted(params object[] tokens)
+        public bool IsInvalid(params string[] tokens)
         {
             // determines if the whitelist contines any of the tokens
             return ComparatorInvalid.Any(token => tokens.Contains(token));
@@ -195,50 +502,182 @@ namespace Abscript.Parser
 
     }
     
-    public class LexerCombination
+    public class LexerCombinationAttribute : Attribute
     {
-        public List<LexerCommand> Pattern { get; private set; } = new List<LexerCommand>();
+        public List<LexerCommandAttribute> ComparatorPattern { get; private set; } = new List<LexerCommandAttribute>();
 
-        public LexerCombination SetCombinationPattern(params LexerCommand[] patternIn)
+        public bool IsEndpoint(string token)
         {
-            Pattern = patternIn.ToList();
+            // determines if the whitelist contines any of the tokens
+            return ComparatorPattern.Any(command => command.IsEndpoint(token));
+        }
+        public bool IsInvalid(string token)
+        {
+            // determines if the whitelist contines any of the tokens
+            return ComparatorPattern.Any(command => command.IsInvalid(token));
+        }
+
+        public LexerCombinationAttribute SetComparatorPattern(params LexerCommandAttribute[] patternIn)
+        {
+            ComparatorPattern = patternIn.ToList();
             return this;
         }
 
     }
 
-    public class TokenDirective
+    public class TokenDirectiveAttribute : Attribute
     {
-        public List<LexerCombination> Combinations { get; private set; } = new();
-        public List<object> Identifiers { get; private set; } = new();
+        public List<LexerCombinationAttribute> Combinations { get; private set; } = new();
+        List<object> Identifiers { get; set; } = new();
+        List<object> IdentifiersPrepared { get; set; } = new();
         public TokenCombo Type { get; private set; } = TokenCombo.UNKNOWN;
-        public TokenDirective SetType(TokenCombo token)
+        public TokenDirectiveAttribute SetType(TokenCombo token)
         {
             Type = token;
             return this;
         }
 
-        public TokenDirective SetLexerMatch(params object[] match)
+
+        private Regex? MakeRegex(string str)
         {
-            Identifiers = match.ToList();
+            if (str.StartsWith("regex"))
+            {
+                return new Regex(str[5..]);
+            }
+            return null;
+        }
+
+        public bool IsIdentifier(string compareString)
+        {
+            // Returns if the identifiers list contains compareString
+            foreach (var identifier in IdentifiersPrepared)
+            {
+                if (identifier is string str)
+                {
+                    if (str == compareString)
+                    {
+                        return true;
+                    }
+                }
+                else if (identifier is Regex regex)
+                {
+                    if (regex.IsMatch(compareString))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        public bool IsWhitelistMatch(string str)
+        {
+            foreach (var comparator in Combinations)
+            {
+                if (comparator.IsEndpoint(str))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        public bool IsBlacklistMatch(string str)
+        {
+            foreach (var comparator in Combinations)
+            {
+                if (comparator.IsInvalid(str))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        public List<object> GetIdentifiers()
+        {   
+            return IdentifiersPrepared;
+        }
+
+        private void PrepareIdentifiers()
+        {
+            if (IdentifiersPrepared.Count == 0)
+            {
+                IdentifiersPrepared = new();
+                foreach (var identifier in Identifiers)
+                {
+                    var type = identifier.GetType().ToString();
+                    if (identifier is string id)
+                    {
+                        var regex = MakeRegex(id);
+                        if (regex != null)
+                        {
+                            IdentifiersPrepared.Add(regex);
+                        }
+                        else
+                        {
+                            IdentifiersPrepared.Add(id);
+                        }
+                    }
+                    else if (identifier is Regex id2)
+                    {
+                        IdentifiersPrepared.Add(id2);
+                    }
+                    else if (identifier is TokenSimple id3)
+                    {
+                        var tokens = EnumExtensions.GetIdentifiers(id3);
+                        foreach (var token in tokens)
+                        {
+                            var regex = MakeRegex(token);
+                            if (regex != null) IdentifiersPrepared.Add(regex);
+                            else IdentifiersPrepared.Add(token);
+                        }
+                    }
+                    else if (identifier is TokenCombo id4)
+                    {
+                        var tokens = EnumExtensions.GetIdentifiers(id4);
+                        foreach (var token in tokens)
+                        {
+                            var regex = MakeRegex(token);
+                            if (regex != null) IdentifiersPrepared.Add(regex);
+                            else IdentifiersPrepared.Add(token);
+                        }
+
+                    }
+                }
+            }
+        }
+
+        public TokenDirectiveAttribute SetIdentifiers(params object[]? match)
+        {
+            if(match != null)
+            {
+                foreach(object obj in match)
+                {
+                    if(obj is List<string> lst) Identifiers.AddRange(lst);
+                    if(obj is List<object> lst2) Identifiers.AddRange(lst2);
+                    else Identifiers.Add(obj);
+                
+                }
+                PrepareIdentifiers();
+            }
             return this;
         }
-        public TokenDirective DefineCombinations(params LexerCombination[] combinations)
+        public TokenDirectiveAttribute DefineCombinations(params LexerCombinationAttribute[] combinations)
         {
             Combinations = combinations.ToList();
             return this;
         }
     }
-    public class TokenDirectiveContainer
+    public class TokenDirectiveContainerAttribute : Attribute
     {
-        public List<TokenDirective> Identifiers { get; private set; } = new();
+        public List<TokenDirectiveAttribute> Directives { get; private set; } = new();
         public TokenCombo Type { get; private set; } = TokenCombo.UNKNOWN;
-        public TokenDirectiveContainer SetDirectives(params TokenDirective[] identifiers)
+
+        public TokenDirectiveContainerAttribute SetDirectives(params TokenDirectiveAttribute[] identifiers)
         {
-            Identifiers = identifiers.ToList();
+            Directives = identifiers.ToList();
             return this;
         }
-        public TokenDirectiveContainer SetType(TokenCombo tokenType)
+        public TokenDirectiveContainerAttribute SetType(TokenCombo tokenType)
         {
             Type = tokenType;
             return this;
@@ -264,122 +703,76 @@ namespace Abscript.Parser
          * 
          */
 
-        public static readonly Dictionary<TokenCategory, TokenDirectiveContainer>
-            TokenDirectives = new()
+        public static readonly Dictionary<TokenSuperCategory, TokenDirectiveContainerAttribute>
+            DirectiveContainer = new()
             {
                 {
-                    TokenCategory.COMMENT,
-                    new TokenDirectiveContainer()
+                    TokenSuperCategory.COMMENT,
+                    new TokenDirectiveContainerAttribute()
                     .SetDirectives(
-                        new TokenDirective()
+                        new TokenDirectiveAttribute()
                         .SetType(TokenCombo.COMMENT_LINE)
-                        .SetLexerMatch("//")
+                        .SetIdentifiers(TokenCombo.COMMENT_LINE.GetIdentifiers())
                         .DefineCombinations(
-                            new LexerCombination().SetCombinationPattern(
-                                new LexerCommand().SetOp(LexerOperation.NULLIFY_TO)
-                                .SetComparatorClose(TokenSimple.NEWLINE)
+                            new LexerCombinationAttribute()
+                            .SetComparatorPattern(
+                                new LexerCommandAttribute().SetOperation(LexerOperation.NULLIFY_TO)
+                                .SetComparatorEndpoint(TokenSimple.NEWLINE)
                             )
                         ),
-                        new TokenDirective()
+                        new TokenDirectiveAttribute()
                         .SetType(TokenCombo.COMMENT_BLOCK_OPEN)
-                        .SetLexerMatch("/*")
+                        .SetIdentifiers(TokenCombo.COMMENT_BLOCK_OPEN.GetIdentifiers())
                         .DefineCombinations(
-                            new LexerCombination()
-                            .SetCombinationPattern(
-                                new LexerCommand().SetOp(LexerOperation.OPEN),
-                                new LexerCommand().SetOp(LexerOperation.NULLIFY_TO)
-                                .SetComparatorClose(TokenCombo.COMMENT_BLOCK_CLOSE)
+                            new LexerCombinationAttribute()
+                            .SetComparatorPattern(
+                                new LexerCommandAttribute().SetOperation(LexerOperation.OPEN),
+                                new LexerCommandAttribute().SetOperation(LexerOperation.NULLIFY_TO)
+                                .SetComparatorEndpoint(TokenCombo.COMMENT_BLOCK_CLOSE)
                             )
                         ),
-                        new TokenDirective()
+                        new TokenDirectiveAttribute()
                         .SetType(TokenCombo.COMMENT_BLOCK_CLOSE)
-                        .SetLexerMatch("*/")
+                        .SetIdentifiers(TokenCombo.COMMENT_BLOCK_CLOSE.GetIdentifiers())
                         .DefineCombinations(
-                            new LexerCombination()
-                            .SetCombinationPattern(
-                                new LexerCommand().SetOp(LexerOperation.CLOSE),
-                                new LexerCommand().SetOp(LexerOperation.NORMALIZE)
+                            new LexerCombinationAttribute()
+                            .SetComparatorPattern(
+                                new LexerCommandAttribute().SetOperation(LexerOperation.CLOSE),
+                                new LexerCommandAttribute().SetOperation(LexerOperation.NORMALIZE)
                             )
                         )
                     )
                 },
                 {
-                    TokenCategory.IDENTIFIER,
-                    new TokenDirectiveContainer().SetDirectives(
-                        new TokenDirective().SetType(TokenCombo.ANY_IDENTIFIER)
+                    TokenSuperCategory.IDENTIFIER,
+                    new TokenDirectiveContainerAttribute().SetDirectives(
+                        new TokenDirectiveAttribute()
+                        .SetType(TokenCombo.ANY_IDENTIFIER)
                         // Set entry identifier of regex grabbing one return value
-                        .SetLexerMatch(new Regex(@"[a-zA-Z_][a-zA-Z0-9_]*"))
+                        .SetIdentifiers(TokenCombo.ANY_IDENTIFIER.GetIdentifiers())
                         .DefineCombinations(
-                            new LexerCombination()
-                            .SetCombinationPattern(
-                                new LexerCommand()
-                                .SetOp(LexerOperation.MATCH_REGEX)
-                                .SetComparatorClose(
+                            new LexerCombinationAttribute()
+                            .SetComparatorPattern(
+                                new LexerCommandAttribute()
+                                .SetOperation(LexerOperation.MATCH_REGEX)
+                                .SetComparatorEndpoint(
                                     TokenSimple.WHITESPACE,
                                     TokenSimple.NEWLINE,
-                                    TokenSimple.OPERATOR
+                                    TokenCombo.PRIMARY_OPERATOR,
+                                    TokenCombo.UNARY_OPERATOR
                                 )
-                            ),
-                            new LexerCombination()
-                            .SetCombinationPattern(
-                                new LexerCommand()
-                                .SetOp(LexerOperation.MATCH_REGEX)
-                                .SetComparatorClose(
-                                    TokenSimple.WHITESPACE,
-                                    TokenSimple.NEWLINE,
-                                    TokenSimple.OPERATOR,
-                                    TokenSimple.COMMA,
-                                    TokenSimple.SEMICOLON,
-                                    TokenSimple.OPEN,
-                                    TokenSimple.CLOSE,
-                                    TokenSimple.BRACKET_OPEN,
-                                    TokenSimple.BRACKET_CLOSE,
-                                    TokenSimple.PARENTHESIS_OPEN,
-                                    TokenSimple.PARENTHESIS_CLOSE,
-                                    TokenSimple.BRACE_OPEN,
-                                    TokenSimple.BRACE_CLOSE,
-                                    TokenSimple.DOT,
-                                    TokenSimple.COLON,
-                                    TokenSimple.EQUAL,
-                                    TokenSimple.NOT_EQUAL,
-                                    TokenSimple.LESS_THAN,
-                                    TokenSimple.LESS_THAN_EQUAL,
-                                    TokenSimple.GREATER_THAN,
-                                    TokenSimple.GREATER_THAN_EQUAL,
-                                    TokenSimple.PLUS,
-                                    TokenSimple.MINUS,
-                                    TokenSimple.MULTIPLY,
-                                    TokenSimple.DIVIDE,
-                                    TokenSimple.MODULUS,
-                                    TokenSimple.EXPONENT,
-                                    TokenSimple.AMPERSAND,
-                                    TokenSimple.PIPE,
-                                    TokenSimple.CARET,
-                                    TokenSimple.TILDE,
-                                    TokenSimple.QUESTION,
-                                    TokenSimple.EXCLAMATION,
-                                    TokenSimple.DOUBLE_QUOTE,
-                                    TokenSimple.SINGLE_QUOTE,
-                                    TokenSimple.BACKTICK,
-                                    TokenSimple.BACKSLASH,
-                                    TokenSimple.PERCENT,
-                                    TokenSimple.DOLLAR,
-                                    TokenSimple.HASH,
-                                    TokenSimple.AT,
-                                    TokenSimple.AMPERSAND_AMPERSAND,
-                                    TokenSimple.PIPE_PIPE,
-                                    TokenSimple.EQUAL_EQUAL,
-                                    TokenSimple.NOT_EQUAL_EQUAL,
-                                    
+                            )
                         )
                     )
-
                 }
-
-                
-
             };
             
+
+        public static TokenDirectiveContainerAttribute GetDirectives(TokenSuperCategory category)
+        {
+            return DirectiveContainer[category];
+        }
+        /*
         public static readonly Dictionary<string, TokenCategory>
             ReservedWords = new()
             {
@@ -440,9 +833,9 @@ namespace Abscript.Parser
                 { ",", TokenCategory.DECLARATION },
                 { "var", TokenCategory.DECLARATION }
             };
+        */
 
-
-
+        /*
         private static Dictionary<string, TokenCategory> _allFull = new();
         public static Dictionary<string, TokenCategory> AllFull
         {
@@ -509,81 +902,115 @@ namespace Abscript.Parser
         {
             return AllFull[stringIn];
         }
+        */
         
     }
+
+    class LexerState
+    {
+        public Token? CurrentToken { get; set; } = new Token();
+        public LexerOperation CurrentOperation { get; set; } = LexerOperation.NONE;
+        public int CurrentOperationPosition { get; set; } = 0;
+        public int CurrentScope { get; set; } = 0;
+    }
+
 
     // This is a basic translation lexer to create readable script objects
     internal class Lexer
     {
 
+        LexerState State;
 
         bool PrepareTypeIdentifier(Token token, string rawScript)
         {
-            for (int pos = token.StartPos; pos < rawScript.Length; pos++ )
+            for (int pos = token.StartPos; pos < rawScript.Length; pos++)
             {
                 char curChar = rawScript[pos];
-                if (Char.IsLetterOrDigit(curChar) || curChar == '_')
-                {
-                    token.EndPos = pos;
-                    token.Identifier += curChar;
-                }
-                else
-                {
-                    switch (curChar)
-                    {
-                        case ' ': 
-                        case '=':
-                            if (Tokens.IsReserved(token.Identifier))
-                            {
-                                token.Type = Tokens.GetType(token.Identifier);
-                                return true;
-                            } 
-                            else
-                            {
-                                token.Type = TokenCategory.IDENTIFIER;
-                                return true;
-                            }
-                    }
-                }
+                
             }
             return true;
         }
 
-        public bool PrepareToken(Token token, string rawScript)
+        bool IdentifyToken(string rawToken)
         {
-            // The start of a variable must be a letter or _
-            var reserved = Tokens.Reserved(token.StartPos, rawScript);
-            if ( reserved.Length > 0 )
+            // If a token matches, it needs to register the type and return true
+            var directives = Tokens.DirectiveContainer; //token.StartPos, rawScript);
+            foreach (var containerPair in directives)
             {
-                token.Type = Tokens.GetType(reserved);
-                token.Identifier = reserved;
-                token.EndPos = token.StartPos + reserved.Length - 1;
-                return true;
+                // Attempt to match the current character with a directive.
+                
+                TokenSuperCategory category = containerPair.Key;
+                foreach(var directive in containerPair.Value.Directives)
+                {
+                    // Compare the identifier with the currently captured token.
+                    if(directive.IsIdentifier(rawToken))
+                    {
+                        
+                        State.CurrentToken.AddType(directive.Type);
+                        State.CurrentToken.Identifier = rawToken;
+                        goto gohere;
+                    }
+
+
+                }
+
+                //return PrepareTypeIdentifier(token, rawScript);
             }
-            if (Char.IsLetter(rawScript[token.StartPos]) || rawScript[token.StartPos] == '_')
-            {
-                return PrepareTypeIdentifier(token, rawScript);
-            }
-            
             return false;
+        gohere:
+            return true;
         }
 
-        public void TranslateIntoRawTokens(string rawScriptFile)
+        bool LexerCommandActive(string comparatorToken)
+        {
+            return State.CurrentOperation != LexerOperation.NONE;
+        }
+        
+        void TranslateIntoRawTokens(string rawScript)
         {
             // Replace newlines with spaces.
-            string rawScript = rawScriptFile.Replace("\n", " ");
             int currentScope = 0;
             List<Token> list = new List<Token>();
-            for(int pos = 0; pos < rawScript.Length; pos++)
+            State.CurrentToken = new Token();
+            string stringCombo = "";
+            for (int pos = 0; pos < rawScript.Length; pos++)
             {
+                if (State.CurrentToken == null) State.CurrentToken = new(pos, currentScope);
                 char currentChar = rawScript[pos];
                 // Empty character, move along sir.
-                if (currentChar == ' ') continue; 
-                Token currentToken = new(pos, currentScope);
-                if(PrepareToken(currentToken, rawScript))
+                stringCombo += currentChar;
+                if (LexerCommandActive(stringCombo))
                 {
-                    pos = currentToken.EndPos;
-                    list.Add(currentToken);
+                    switch (State.CurrentOperation)
+                    {
+                        case LexerOperation.OPEN:
+                            break;
+                        case LexerOperation.CLOSE:
+                            break;
+                        case LexerOperation.NORMALIZE:
+                            break;
+                        case LexerOperation.NULLIFY_TO:
+                            break;
+                        case LexerOperation.ENSUE:
+                            break;
+                        case LexerOperation.MATCH_REGEX:
+                            break;
+                        case LexerOperation.EXPECT:
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                if(IdentifyToken(stringCombo))
+                {
+                    pos += State.CurrentToken.Identifier.Length;
+                    list.Add(State.CurrentToken);
+                    State.CurrentToken = null;
+                    stringCombo = "";
+                }
+                else
+                {
+                    State.CurrentToken.StartPos = pos;
                 }
             }
 
@@ -597,6 +1024,7 @@ namespace Abscript.Parser
         public Lexer(string _codeInput)
         {
             // First pass
+            State = new LexerState();
             TranslateIntoRawTokens(_codeInput);
         }
 
